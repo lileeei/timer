@@ -72,11 +72,11 @@ func (tw *TimerWheel) AddNode(d time.Duration, f func()) *Node {
 
 
 //向时间轮中添加任务结点
-func (tw *TimerWheel) addNode(n *Node) {
-	expire := n.expire
+func (tw *TimerWheel) addNode(nd *Node) {
+	expire := nd.expire
 	current := tw.time
 	if (expire | TIME_NEAR_MASK) == (current | TIME_NEAR_MASK) {
-		tw.near[expire&TIME_NEAR_MASK].PushBack(n)
+		tw.near[expire&TIME_NEAR_MASK].PushBack(nd)
 	} else {
 		var i uint32
 		var mask uint32 = TIME_NEAR << TIME_LEVEL_SHIFT
@@ -87,7 +87,7 @@ func (tw *TimerWheel) addNode(n *Node) {
 			mask <<= TIME_LEVEL_SHIFT
 		}
 
-		tw.t[i][(expire>>(TIME_NEAR_SHIFT+i*TIME_LEVEL_SHIFT))&TIME_LEVEL_MASK].PushBack(n)
+		tw.t[i][(expire>>(TIME_NEAR_SHIFT+i*TIME_LEVEL_SHIFT))&TIME_LEVEL_MASK].PushBack(nd)
 	}
 
 }
@@ -97,24 +97,25 @@ func (tw *TimerWheel) String() string {
 }
 
 
-//将timeout的任务从时间轮中删除
-func dispatchList(front *list.Element) {
-	for e := front; e != nil; e = e.Next() {
-		node := e.Value.(*Node)
-		go node.callBackFunc()
+//开启时间轮
+func (tw *TimerWheel) Start() {
+	tick := time.NewTicker(tw.tick)
+	defer tick.Stop()
+	for {
+		select {
+		case <-tick.C:
+			tw.update()
+		case <-tw.quit:
+			return
+		}
 	}
 }
 
-//将hash值为idx的任务列表迁移到层级为level的层级上
-func (tw *TimerWheel) moveList(level, idx int) {
-	l := tw.t[level][idx]
-	front := l.Front()
-	l.Init()   //将该list清空
-
-	for e := front; e != nil; e = e.Next() {
-		node := e.Value.(*Node)
-		tw.addNode(node)
-	}
+//更新时间轮
+func (tw *TimerWheel) update() {
+	tw.execute()
+	tw.shift()
+	tw.execute()
 }
 
 //转动时间轮
@@ -124,7 +125,7 @@ func (tw *TimerWheel) shift() {
 	tw.time++
 	ct := tw.time
 
-	//时间轮第一次shift
+	//
 	if ct == 0 {
 		tw.moveList(3, 0)
 	} else {
@@ -145,8 +146,21 @@ func (tw *TimerWheel) shift() {
 			i++
 		}
 	}
-	
+
 	tw.Unlock()
+}
+
+
+//将level层上hash值为idx的任务列表进行调整
+func (tw *TimerWheel) moveList(level, idx int) {
+	l := tw.t[level][idx]
+	front := l.Front()
+	l.Init()   //将该list清空
+
+	for e := front; e != nil; e = e.Next() {
+		node := e.Value.(*Node)
+		tw.addNode(node)
+	}
 }
 
 
@@ -154,10 +168,10 @@ func (tw *TimerWheel) shift() {
 func (tw *TimerWheel) execute() {
 	tw.Lock()
 	idx := tw.time & TIME_NEAR_MASK
-	vec := tw.near[idx]
-	if vec.Len() > 0 {
-		front := vec.Front()
-		vec.Init()
+	l := tw.near[idx]
+	if l.Len() > 0 {
+		front := l.Front()
+		l.Init()
 		tw.Unlock()
 
 		dispatchList(front)
@@ -167,25 +181,12 @@ func (tw *TimerWheel) execute() {
 	tw.Unlock()
 }
 
-//更新时间轮
-func (tw *TimerWheel) update() {
-	tw.execute()
-	tw.shift()
-	tw.execute()
-}
 
-
-//开启时间轮
-func (tw *TimerWheel) Start() {
-	tick := time.NewTicker(tw.tick)
-	defer tick.Stop()
-	for {
-		select {
-		case <-tick.C:
-			tw.update()
-		case <-tw.quit:
-			return
-		}
+//将timeout的任务从时间轮中删除
+func dispatchList(front *list.Element) {
+	for e := front; e != nil; e = e.Next() {
+		node := e.Value.(*Node)
+		go node.callBackFunc()
 	}
 }
 
