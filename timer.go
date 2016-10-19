@@ -59,15 +59,19 @@ func NewTimerWheel(d time.Duration) *TimerWheel {
 }
 
 func (tw *TimerWheel) AddNode(d time.Duration, f func()) *Node {
-	n := new(Node)
-	n.callBackFunc = f
+	nd := new(Node)
+	nd.callBackFunc = f
+
 	tw.Lock()
-	n.expire = uint32(d/tw.tick) + tw.time
-	tw.addNode(n)
+	nd.expire = uint32(d/tw.tick) + tw.time
+	tw.addNode(nd)
 	tw.Unlock()
-	return n
+
+	return nd
 }
 
+
+//向时间轮中添加任务结点
 func (tw *TimerWheel) addNode(n *Node) {
 	expire := n.expire
 	current := tw.time
@@ -101,10 +105,12 @@ func dispatchList(front *list.Element) {
 	}
 }
 
+//将hash值为idx的任务列表迁移到层级为level的层级上
 func (tw *TimerWheel) moveList(level, idx int) {
-	vec := tw.t[level][idx]
-	front := vec.Front()
-	vec.Init()
+	l := tw.t[level][idx]
+	front := l.Front()
+	l.Init()   //将该list清空
+
 	for e := front; e != nil; e = e.Next() {
 		node := e.Value.(*Node)
 		tw.addNode(node)
@@ -117,23 +123,29 @@ func (tw *TimerWheel) shift() {
 	var mask uint32 = TIME_NEAR
 	tw.time++
 	ct := tw.time
-	
+
+	//时间轮第一次shift
 	if ct == 0 {
 		tw.moveList(3, 0)
 	} else {
 		time := ct >> TIME_NEAR_SHIFT
 		var i int = 0
+
+		//
 		for (ct & (mask - 1)) == 0 {
 			idx := int(time & TIME_LEVEL_MASK)
+
 			if idx != 0 {
 				tw.moveList(i, idx)
 				break
 			}
+
 			mask <<= TIME_LEVEL_SHIFT
 			time >>= TIME_LEVEL_SHIFT
 			i++
 		}
 	}
+	
 	tw.Unlock()
 }
 
