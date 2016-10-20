@@ -9,7 +9,7 @@ import (
 
 var sum int32 = 0
 var N int32 = 100
-var tw *TimeWheel
+var tw *TimerWheel
 
 func now() {
 	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
@@ -22,7 +22,7 @@ func now() {
 }
 
 func TestTimer(t *testing.T) {
-	timerwheel := NewTimeWheel(time.Millisecond * 10)
+	timerwheel := NewTimerWheel(time.Millisecond * 10)
 	tw = timerwheel
 	fmt.Println(timerwheel)
 	var i int32
