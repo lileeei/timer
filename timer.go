@@ -119,28 +119,23 @@ func (tw *TimerWheel) shift() {
 	tw.time++
 	ct := tw.time
 
-	//
-	if ct == 0 {
-		tw.moveList(3, 0)
-	} else {
-		time := ct >> TIME_NEAR_SHIFT
-		var i int = 0
+	time := ct >> TIME_NEAR_SHIFT
+	var i int = 0
 
-		//
-		for (ct & (mask - 1)) == 0 {
-			idx := int(time & TIME_LEVEL_MASK)
+	//每执行TIME_NEAR次循环就重建一次层级， 每循环TIME_LEVEL次重建一次下一个level
+	for (ct & (mask - 1)) == 0 {
+		idx := int(time & TIME_LEVEL_MASK)
 
-			if idx != 0 {
-				tw.moveList(i, idx)
+		if idx != 0 {
+			tw.moveList(i, idx)
 
-				break
-			}
-
-			mask <<= TIME_LEVEL_SHIFT
-			time >>= TIME_LEVEL_SHIFT
-
-			i++
+			break
 		}
+
+		mask <<= TIME_LEVEL_SHIFT
+		time >>= TIME_LEVEL_SHIFT
+
+		i++
 	}
 
 	tw.Unlock()
