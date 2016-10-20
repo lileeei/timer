@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-
 const (
 	TIME_NEAR_SHIFT  = 8
 	TIME_NEAR        = 1 << TIME_NEAR_SHIFT
@@ -21,21 +20,20 @@ type TimerWheel struct {
 	near [TIME_NEAR]*list.List
 	t    [4][TIME_LEVEL]*list.List
 	sync.Mutex
-	time uint32	     //时间轮time
-	tick time.Duration   //时间轮的tick
-	quit chan struct{}   //时间轮退出信号
+	time uint32        //时间轮time
+	tick time.Duration //时间轮的tick
+	quit chan struct{} //时间轮退出信号
 }
 
 type Node struct {
 	//TimerId uint32  //定时器id，便于以后查找
-	expire uint32	  //任务过期时间
-	callBackFunc      func()  //回调函数
+	expire       uint32 //任务过期时间
+	callBackFunc func() //回调函数
 }
 
 func (n *Node) String() string {
 	return fmt.Sprintf("Node:expire,%d", n.expire)
 }
-
 
 //创建时间轮
 func NewTimerWheel(d time.Duration) *TimerWheel {
@@ -70,14 +68,15 @@ func (tw *TimerWheel) AddNode(d time.Duration, f func()) *Node {
 	return nd
 }
 
-
 //向时间轮中添加任务结点
 func (tw *TimerWheel) addNode(nd *Node) {
 	expire := nd.expire
 	current := tw.time
+
+	//将定时节点添加到near中
 	if (expire | TIME_NEAR_MASK) == (current | TIME_NEAR_MASK) {
 		tw.near[expire&TIME_NEAR_MASK].PushBack(nd)
-	} else {
+	} else { //将定时节点加入到另外的4个轮中（根据duration的大小加入到不同的层级中）
 		var i uint32
 		var mask uint32 = TIME_NEAR << TIME_LEVEL_SHIFT
 		for i = 0; i < 3; i++ {
@@ -91,11 +90,6 @@ func (tw *TimerWheel) addNode(nd *Node) {
 	}
 
 }
-
-func (tw *TimerWheel) String() string {
-	return fmt.Sprintf("Timer:time:%d, tick:%s", tw.time, tw.tick)
-}
-
 
 //开启时间轮
 func (tw *TimerWheel) Start() {
@@ -118,7 +112,7 @@ func (tw *TimerWheel) update() {
 	tw.execute()
 }
 
-//转动时间轮
+//调整时间轮上的定时节点
 func (tw *TimerWheel) shift() {
 	tw.Lock()
 	var mask uint32 = TIME_NEAR
@@ -138,11 +132,13 @@ func (tw *TimerWheel) shift() {
 
 			if idx != 0 {
 				tw.moveList(i, idx)
+
 				break
 			}
 
 			mask <<= TIME_LEVEL_SHIFT
 			time >>= TIME_LEVEL_SHIFT
+
 			i++
 		}
 	}
@@ -150,19 +146,18 @@ func (tw *TimerWheel) shift() {
 	tw.Unlock()
 }
 
-
 //将level层上hash值为idx的任务列表进行调整
 func (tw *TimerWheel) moveList(level, idx int) {
 	l := tw.t[level][idx]
 	front := l.Front()
-	l.Init()   //将该list清空
+	l.Init() //将该list清空
 
 	for e := front; e != nil; e = e.Next() {
-		node := e.Value.(*Node)
-		tw.addNode(node)
+		nd := e.Value.(*Node)
+		//将定时节点重新加入到时间轮中
+		tw.addNode(nd)
 	}
 }
-
 
 //执行timeout的任务，并把它们从时间轮中删除，每次都从near中删除
 func (tw *TimerWheel) execute() {
@@ -181,7 +176,6 @@ func (tw *TimerWheel) execute() {
 	tw.Unlock()
 }
 
-
 //将timeout的任务从时间轮中删除
 func dispatchList(front *list.Element) {
 	for e := front; e != nil; e = e.Next() {
@@ -190,6 +184,12 @@ func dispatchList(front *list.Element) {
 	}
 }
 
+//关闭时间轮
 func (tw *TimerWheel) Stop() {
 	close(tw.quit)
+}
+
+//便于将时间轮的信息以字符串的形式输出
+func (tw *TimerWheel) String() string {
+	return fmt.Sprintf("Timer:time:%d, tick:%s", tw.time, tw.tick)
 }
