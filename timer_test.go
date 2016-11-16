@@ -8,14 +8,14 @@ import (
 )
 
 var sum int32 = 0
-var N int32 = 100
+var N int32 = 10000
 var tw *TimerWheel
 
 func callBack() {
 	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
 	atomic.AddInt32(&sum, 1)
 	v := atomic.LoadInt32(&sum)
-	if v == N {
+	if v == 2*N {
 		tw.Stop()
 	}
 
@@ -25,12 +25,16 @@ func TestTimer(t *testing.T) {
 	timerwheel := NewTimerWheel(time.Millisecond * 10)
 	tw = timerwheel
 	fmt.Println(timerwheel)
-	var i int32
-	for i = 0; i < N; i++ {
-		timerwheel.AddNode(time.Millisecond*time.Duration(1000*i), callBack)
-	}
+
+	go func() {
+		var i int32
+		for i = 0; i < 2*N; i++ {
+			timerwheel.AddNode(time.Millisecond*time.Duration(10*i), callBack)
+		}
+	}()
+
 	timerwheel.Start()
-	if sum != N {
+	if sum != 2*N {
 		t.Error("failed")
 	}
 }
